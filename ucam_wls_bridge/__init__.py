@@ -14,7 +14,7 @@ from ucam_wls.status import AUTH_DECLINED, NO_MUTUAL_AUTH_TYPES, REQUEST_PARAM_E
 
 
 app = Flask(__name__)
-app.secret_key = os.urandom(32)
+app.secret_key = os.environ["UWB_SECRET_KEY"]
 app.config.update({
     "UPSTREAM_CLIENT_ID": os.environ["UWB_OIDC_CLIENT_ID"],
     "UPSTREAM_CLIENT_SECRET": os.environ["UWB_OIDC_CLIENT_SECRET"],
