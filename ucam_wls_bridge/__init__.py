@@ -10,7 +10,7 @@ from authlib.integrations.flask_client import FlaskOAuth2App, OAuth
 
 from ucam_wls import AuthPrincipal, AuthRequest, load_private_key, LoginService
 from ucam_wls.errors import InvalidAuthRequest, NoMutualAuthType, ProtocolVersionUnsupported, WLSError
-from ucam_wls.status import AUTH_DECLINED, NO_MUTUAL_AUTH_TYPES, REQUEST_PARAM_ERROR, UNSUPPORTED_PROTO_VER, WAA_NOT_AUTHORISED
+from ucam_wls.status import AUTH_DECLINED, NO_MUTUAL_AUTH_TYPES, REQUEST_PARAM_ERROR, UNSUPPORTED_PROTO_VER
 
 
 app = Flask(__name__)
@@ -26,7 +26,7 @@ upstream: FlaskOAuth2App = oauth.upstream
 
 wls = LoginService(load_private_key(os.environ["UWB_KEY_FILE"], int(os.environ["UWB_KEY_ID"])), ["pwd"])
 
-OIDC_EMAIL_DOMAIN = os.environ["UWB_OIDC_EMAIL_DOMAIN"]
+OIDC_EMAIL_DOMAIN = os.environ.get("UWB_OIDC_EMAIL_DOMAIN")
 
 WLS_ERROR_MAP: Dict[Type[WLSError], int] = {
     NoMutualAuthType: NO_MUTUAL_AUTH_TYPES,
@@ -79,9 +79,11 @@ def oidc_callback():
         token = upstream.authorize_access_token()
     except OAuthError as e:
         return fail((f"{e.error}: {e.description}", AUTH_DECLINED), wls_req)
-    user, domain = token["userinfo"]["preferred_username"].split("@", 1)
-    if domain != OIDC_EMAIL_DOMAIN:
-        return fail((f"Invalid email domain {domain}", WAA_NOT_AUTHORISED), wls_req)
+    user = token["userinfo"]["preferred_username"]
+    if OIDC_EMAIL_DOMAIN and "@" in user:
+        user, domain = user.split("@", 1)
+        if domain != OIDC_EMAIL_DOMAIN:
+            return fail((f"Invalid email domain {domain!r}.", AUTH_DECLINED), wls_req)
     now = datetime.utcnow()
     expiry = now + timedelta(hours=6)
     principal = AuthPrincipal(user, ["pwd"], ["current"], expiry)
