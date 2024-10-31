@@ -44,7 +44,7 @@ def fail(error: Union[Tuple[str, int], WLSError], req: Optional[AuthRequest] = N
         resp = wls.generate_failure(code, req)
         return redirect(resp.redirect_url)
     else:
-        return make_response(f"<strong>Error!</strong> {msg}.", 400)
+        return make_response(f"<strong>Error!</strong> {msg}", 400)
 
 
 @app.get("/wls/authenticate")
@@ -58,9 +58,9 @@ def wls_authenticate():
         return fail(NoMutualAuthType(), wls_req)
     parts = urlsplit(wls_req.url)
     if not parts.netloc:
-        return fail(("No return domain specified", REQUEST_PARAM_ERROR), wls_req)
+        return fail(("No return domain specified.", REQUEST_PARAM_ERROR), wls_req)
     if parts.scheme != "https" and parts.netloc != "localhost":
-        return fail(("Insecure web application", REQUEST_PARAM_ERROR), wls_req)
+        return fail(("Insecure web application.", REQUEST_PARAM_ERROR), wls_req)
     session["uwb_query"] = query
     return upstream.authorize_redirect(url_for("oidc_callback", _external=True))
 
@@ -70,7 +70,7 @@ def oidc_callback():
     try:
         query = session["uwb_query"]
     except KeyError:
-        return fail(("Session not started", REQUEST_PARAM_ERROR))
+        return fail(("Session not started.", REQUEST_PARAM_ERROR))
     try:
         wls_req = AuthRequest.from_query_string(query)
     except (InvalidAuthRequest, ProtocolVersionUnsupported) as e:
