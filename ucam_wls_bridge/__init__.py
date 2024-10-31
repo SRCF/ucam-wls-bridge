@@ -3,7 +3,7 @@ import os
 from typing import Dict, Optional, Tuple, Type, Union
 from urllib.parse import urlsplit
 
-from flask import Flask, make_response, redirect, request, session, url_for
+from flask import Flask, make_response, redirect, request, url_for
 
 from authlib.integrations.base_client import OAuthError
 from authlib.integrations.flask_client import FlaskOAuth2App, OAuth
@@ -61,16 +61,15 @@ def wls_authenticate():
         return fail(("No return domain specified.", REQUEST_PARAM_ERROR), wls_req)
     if parts.scheme != "https" and parts.netloc != "localhost":
         return fail(("Insecure web application.", REQUEST_PARAM_ERROR), wls_req)
-    session["uwb_query"] = query
-    return upstream.authorize_redirect(url_for("oidc_callback", _external=True))
+    return upstream.authorize_redirect(url_for("oidc_callback", _external=True), state=query)
 
 
 @app.get("/oidc/callback")
 def oidc_callback():
     try:
-        query = session["uwb_query"]
+        query = request.args["state"]
     except KeyError:
-        return fail(("Session not started.", REQUEST_PARAM_ERROR))
+        return fail(("OAuth2 state missing.", REQUEST_PARAM_ERROR))
     try:
         wls_req = AuthRequest.from_query_string(query)
     except (InvalidAuthRequest, ProtocolVersionUnsupported) as e:
