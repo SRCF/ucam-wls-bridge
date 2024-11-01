@@ -145,7 +145,9 @@ def oidc_callback():
     except OAuthError as e:
         return fail(None, f"{e.error}: {e.description}", AUTH_DECLINED)
     user = token["userinfo"]["preferred_username"]
-    if OIDC_EMAIL_DOMAIN and "@" in user:
+    if OIDC_EMAIL_DOMAIN:
+        if "@" not in user:
+            return fail(None, f"Missing email domain.", AUTH_DECLINED)
         user, domain = user.split("@", 1)
         if domain != OIDC_EMAIL_DOMAIN:
             return fail(None, f"Invalid email domain {domain!r}.", AUTH_DECLINED)
