@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import os
 from typing import Dict, Optional, Tuple, Type, Union
 from urllib.parse import urlsplit
@@ -83,8 +83,7 @@ def oidc_callback():
         user, domain = user.split("@", 1)
         if domain != OIDC_EMAIL_DOMAIN:
             return fail((f"Invalid email domain {domain!r}.", AUTH_DECLINED), wls_req)
-    now = datetime.utcnow()
-    expiry = now + timedelta(hours=6)
+    expiry = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=6)
     principal = AuthPrincipal(user, ["pwd"], ["current"], expiry)
     wls_resp = wls.authenticate_active(wls_req, principal, "pwd")
     return redirect(wls_resp.redirect_url)
