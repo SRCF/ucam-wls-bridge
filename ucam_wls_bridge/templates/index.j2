@@ -1,0 +1,12 @@
+{% extends "_base.j2" %}
+
+{% block title %}ucam-wls-bridge{% endblock %}
+
+{% block body %}
+  <p>This is a ucam-wls-bridge server.</p>
+  {% if user %}
+    <p>You are signed in as {{ user }} &ndash; <a href="{{ url_for("oidc_logout") }}">sign out</a> here.</p>
+  {% else %}
+    <p>You are not signed in &ndash; <a href="{{ url_for("oidc_authenticate") }}">sign in</a> here.</p>
+  {% endif %}
+{% endblock %}

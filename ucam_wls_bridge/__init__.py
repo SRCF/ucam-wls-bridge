@@ -3,7 +3,7 @@ import os
 from typing import Dict, Optional, Type, Union
 from urllib.parse import parse_qs, urlsplit
 
-from flask import Flask, make_response, redirect, request, session, url_for
+from flask import Flask, redirect, render_template, request, session, url_for
 
 from authlib.integrations.base_client import OAuthError
 from authlib.integrations.flask_client import FlaskOAuth2App, OAuth
@@ -72,24 +72,12 @@ def fail(req: Optional[AuthRequest], error: Union[str, WLSError], code: Optional
         resp = wls.generate_failure(code, req)
         return redirect(resp.redirect_url)
     else:
-        return make_response(f"<p><strong>Error!</strong> {msg}</p>", 400)
+        return render_template("error.j2", msg=msg, code=code)
 
 
 @app.get("/")
 def index():
-    user = get_user()
-    if user:
-        status = f"signed in as {user}"
-        action = "sign out"
-        route = url_for("oidc_logout")
-    else:
-        status = "not signed in"
-        action = "sign in"
-        route = url_for("oidc_authenticate")
-    return f"""
-    <p>This is a ucam-wls-bridge server.</p>
-    <p>You are {status} &ndash; <a href="{route}">{action} here</a>.</p>
-    """
+    return render_template("index.j2", user=get_user())
 
 
 @app.get("/wls/authenticate")
@@ -98,21 +86,8 @@ def wls_authenticate():
     try:
         req = parse_wls(query)
     except WLSFail as e:
-        fail(*e.args)
-    user = get_user()
-    if user:
-        desc = f" ({req.desc})" if req.desc else ""
-        msg = f"You're authenticating to {req.url}{desc}."
-        action = f"Authenticate as {user}"
-    else:
-        msg = "You need to sign in first."
-        action = "Sign in"
-    return f"""
-    <p>{msg}</p>
-    <form method="post">
-      <input type="submit" value="{action}">
-    </form>
-    """
+        return fail(*e.args)
+    return render_template("authenticate.j2", user=get_user(), url=req.url, desc=req.desc)
 
 
 @app.post("/wls/authenticate")
