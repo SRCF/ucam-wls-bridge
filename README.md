@@ -2,6 +2,20 @@
 
 This is a Web Login Service (WLS) for the Ucam-WebAuth aka. WAA2WLS protocol, which defers to an OpenID Connect (OIDC) server for the underlying authentication.
 
+## Key generation
+
+Generate an RSA private key using OpenSSL:
+
+```
+openssl genrsa -out private.pem 4096
+```
+
+Extract the corresponding public key in `RSA PUBLIC KEY` format:
+
+```
+ssh-keygen -f private.pem -e -m pem >public.pub
+```
+
 ## WLS configuration
 
 Environment variables:
