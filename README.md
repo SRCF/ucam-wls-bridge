@@ -24,9 +24,27 @@ Environment variables:
 - `UWB_OIDC_URL`: URL to the upstream OIDC server's discovery document e.g. `https://login.microsoftonline.com/{tenant}/v2.0/.well-known/openid-configuration`
 - `UWB_OIDC_CLIENT_ID`: client identifier for an app registration on the OIDC server
 - `UWB_OIDC_CLIENT_SECRET`: corresponding client secret for that app registration
-- `UWB_OIDC_EMAIL_DOMAIN`: (optional) if the preferred username returned by the OIDC server is an email address, require it to be on this domain and return just the local part
+- `UWB_OIDC_HANDLER`: (optional) module and attribute path to a method for handling usernames and ptags
 - `UWB_KEY_FILE`: path to an RSA private key used to sign WLS responses
 - `UWB_KEY_ID`: integer key ID used to identify the above key
+
+Handler methods should either return a 2-tuple of username and ptags, or raise `LookupError` to decline authentication.  Example:
+
+```python
+def handler(user: dict):
+    try:
+        username: str = user["preferred_username"]
+        groups: list[str] = user["groups"]
+    except KeyError:
+        raise LookupError("Missing username or groups in user info.")
+    if not username.endswith("@example.com"):
+        raise LookupError("Invalid email domain.")
+    if "users" not in groups:
+        raise LookupError("Not part of 'users' group.")
+    return username.split("@")[0], ["current"]
+```
+
+If defined in `helpers.py`, set `UWB_OIDC_HANDLER=helpers:handler`.
 
 ## Running the service
 

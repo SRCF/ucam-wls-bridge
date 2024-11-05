@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta, timezone
+from functools import reduce
+from importlib import import_module
 import os
-from typing import Dict, Optional, Type, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 from urllib.parse import parse_qs, urlsplit
 
 from flask import Flask, redirect, render_template, request, session, url_for
@@ -11,6 +13,19 @@ from authlib.integrations.flask_client import FlaskOAuth2App, OAuth
 from ucam_wls import AuthPrincipal, AuthRequest, load_private_key, LoginService
 from ucam_wls.errors import NoMutualAuthType, ProtocolVersionUnsupported, WLSError
 from ucam_wls.status import AUTH_DECLINED, NO_MUTUAL_AUTH_TYPES, REQUEST_PARAM_ERROR, UNSUPPORTED_PROTO_VER
+
+
+User = Tuple[str, List[str]]  # username, ptags
+Handler = Callable[[Dict[str, Any]], User]
+
+_SESSION_KEY = "uwb_auth"
+SESSION_USERNAME_KEY = f"{_SESSION_KEY}_username"
+SESSION_PTAGS_KEY = f"{_SESSION_KEY}_ptags"
+
+WLS_ERROR_MAP: Dict[Type[WLSError], int] = {
+    NoMutualAuthType: NO_MUTUAL_AUTH_TYPES,
+    ProtocolVersionUnsupported: UNSUPPORTED_PROTO_VER,
+}
 
 
 app = Flask(__name__)
@@ -26,25 +41,26 @@ upstream: FlaskOAuth2App = oauth.upstream
 
 wls = LoginService(load_private_key(os.environ["UWB_KEY_FILE"], int(os.environ["UWB_KEY_ID"])), ["pwd"])
 
-OIDC_EMAIL_DOMAIN = os.environ.get("UWB_OIDC_EMAIL_DOMAIN")
-
-WLS_ERROR_MAP: Dict[Type[WLSError], int] = {
-    NoMutualAuthType: NO_MUTUAL_AUTH_TYPES,
-    ProtocolVersionUnsupported: UNSUPPORTED_PROTO_VER,
-}
+handler: Optional[Handler] = None
 
 
 class WLSFail(Exception):
     pass
 
 
-SESSION_KEY = "uwb_auth"
+def get_user() -> Union[User, Tuple[None, None]]:
+    try:
+        return (session[SESSION_USERNAME_KEY], session[SESSION_PTAGS_KEY])
+    except KeyError:
+        return (None, None)
 
-def get_user() -> Optional[str]:
-    return session.get(SESSION_KEY)
+def set_user(username: str, ptags: List[str]):
+    session[SESSION_USERNAME_KEY] = username
+    session[SESSION_PTAGS_KEY] = ptags
 
-def set_user(user: Optional[str]):
-    session[SESSION_KEY] = user
+def clear_user():
+    session.pop(SESSION_USERNAME_KEY, None)
+    session.pop(SESSION_PTAGS_KEY, None)
 
 
 def parse_wls(query: str):
@@ -66,6 +82,8 @@ def fail(req: Optional[AuthRequest], error: Union[str, WLSError], code: Optional
     if isinstance(error, WLSError):
         msg = " ".join(filter(None, (error.__doc__, str(error))))
         code = WLS_ERROR_MAP.get(error.__class__)
+    else:
+        msg = error
     if not code:
         code = REQUEST_PARAM_ERROR
     if req and req.fail:
@@ -77,7 +95,8 @@ def fail(req: Optional[AuthRequest], error: Union[str, WLSError], code: Optional
 
 @app.get("/")
 def index():
-    return render_template("index.j2", user=get_user())
+    username, _ = get_user()
+    return render_template("index.j2", username=username)
 
 
 @app.get("/wls/authenticate")
@@ -87,7 +106,8 @@ def wls_authenticate():
         req = parse_wls(query)
     except WLSFail as e:
         return fail(*e.args)
-    return render_template("authenticate.j2", user=get_user(), url=req.url, desc=req.desc)
+    username, _ = get_user()
+    return render_template("authenticate.j2", username=username, url=req.url, desc=req.desc)
 
 
 @app.post("/wls/authenticate")
@@ -97,10 +117,10 @@ def wls_authenticate_submit():
         req = parse_wls(query)
     except WLSFail as e:
         fail(*e.args)
-    user = get_user()
-    if user:
+    username, ptags = get_user()
+    if username:
         expiry = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=6)
-        principal = AuthPrincipal(user, ["pwd"], ["current"], expiry)
+        principal = AuthPrincipal(username, ["pwd"], ptags, expiry)
         wls_resp = wls.authenticate_active(req, principal, "pwd")
         return redirect(wls_resp.redirect_url)
     else:
@@ -119,14 +139,17 @@ def oidc_callback():
         token = upstream.authorize_access_token()
     except OAuthError as e:
         return fail(None, f"{e.error}: {e.description}", AUTH_DECLINED)
-    user = token["userinfo"]["preferred_username"]
-    if OIDC_EMAIL_DOMAIN:
-        if "@" not in user:
-            return fail(None, f"Missing email domain.", AUTH_DECLINED)
-        user, domain = user.split("@", 1)
-        if domain != OIDC_EMAIL_DOMAIN:
-            return fail(None, f"Invalid email domain {domain!r}.", AUTH_DECLINED)
-    set_user(user)
+    ptags: List[str]
+    if handler:
+        try:
+            username, ptags = handler(token["userinfo"])
+        except LookupError as e:
+            msg = e.args[0] if e.args else "Declined by service configuration."
+            return fail(None, msg, AUTH_DECLINED)
+    else:
+        username = token["userinfo"]["preferred_username"]
+        ptags = []
+    set_user(username, ptags)
     state = request.args["state"]
     try:
         AuthRequest.from_query_string(state)
@@ -138,8 +161,13 @@ def oidc_callback():
 
 @app.get("/oidc/logout")
 def oidc_logout():
-    set_user(None)
+    clear_user()
     return redirect(url_for("index"))
+
+
+if os.environ.get("UWB_OIDC_HANDLER"):
+    _handler_module, _handler_attribute = os.environ["UWB_OIDC_HANDLER"].split(":")
+    handler = reduce(getattr, _handler_attribute.split("."), import_module(_handler_module))
 
 
 if __name__ == "__main__":

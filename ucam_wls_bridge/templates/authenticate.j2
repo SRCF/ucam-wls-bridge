@@ -5,6 +5,6 @@
 {% block body %}
   <p>You're authenticating to <em>{{ url }}</em>{% if desc %} (<strong>{{ desc }}</strong>){% endif %}.</p>
   <form method="post">
-    <input type="submit" value="{% if user %}Authenticate as {{ user }}{% else %}Sign in to authenticate{% endif %}">
+    <input type="submit" value="{% if username %}Authenticate as {{ username }}{% else %}Sign in to authenticate{% endif %}">
   </form>
 {% endblock %}

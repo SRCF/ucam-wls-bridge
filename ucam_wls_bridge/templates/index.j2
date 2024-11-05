@@ -4,8 +4,8 @@
 
 {% block body %}
   <p>This is a ucam-wls-bridge server.</p>
-  {% if user %}
-    <p>You are signed in as {{ user }} &ndash; <a href="{{ url_for("oidc_logout") }}">sign out</a> here.</p>
+  {% if username %}
+    <p>You are signed in as {{ username }} &ndash; <a href="{{ url_for("oidc_logout") }}">sign out</a> here.</p>
   {% else %}
     <p>You are not signed in &ndash; <a href="{{ url_for("oidc_authenticate") }}">sign in</a> here.</p>
   {% endif %}
