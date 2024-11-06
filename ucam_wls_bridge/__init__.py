@@ -95,8 +95,8 @@ def fail(req: Optional[AuthRequest], error: Union[str, WLSError], code: Optional
 
 @app.get("/")
 def index():
-    username, _ = get_user()
-    return render_template("index.j2", username=username)
+    username, ptags = get_user()
+    return render_template("index.j2", username=username, ptags=ptags)
 
 
 @app.get("/wls/authenticate")
@@ -106,8 +106,16 @@ def wls_authenticate():
         req = parse_wls(query)
     except WLSFail as e:
         return fail(*e.args)
-    username, _ = get_user()
-    return render_template("authenticate.j2", username=username, url=req.url, desc=req.desc)
+    username, ptags = get_user()
+    domain = urlsplit(req.url).netloc
+    return render_template(
+        "authenticate.j2",
+        username=username,
+        ptags=ptags,
+        domain=domain,
+        url=req.url,
+        desc=req.desc,
+    )
 
 
 @app.post("/wls/authenticate")
