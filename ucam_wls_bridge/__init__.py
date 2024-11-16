@@ -12,7 +12,7 @@ from authlib.integrations.flask_client import FlaskOAuth2App, OAuth
 
 from ucam_wls import AuthPrincipal, AuthRequest, load_private_key, LoginService
 from ucam_wls.errors import NoMutualAuthType, ProtocolVersionUnsupported, WLSError
-from ucam_wls.status import AUTH_DECLINED, NO_MUTUAL_AUTH_TYPES, REQUEST_PARAM_ERROR, UNSUPPORTED_PROTO_VER
+from ucam_wls.status import AUTH_DECLINED, NO_MUTUAL_AUTH_TYPES, REQUEST_PARAM_ERROR, UNSUPPORTED_PROTO_VER, USER_CANCEL
 
 
 User = Tuple[str, List[str]]  # username, ptags
@@ -124,7 +124,10 @@ def wls_authenticate_submit():
     try:
         req = parse_wls(query)
     except WLSFail as e:
-        fail(*e.args)
+        return fail(*e.args)
+    action = request.form.get("action")
+    if action == "cancel":
+        return fail(req, "User declined authentication.", USER_CANCEL)
     username, ptags = get_user()
     if username:
         expiry = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=6)
