@@ -87,10 +87,10 @@ def fail(req: Optional[AuthRequest], error: Union[str, WLSError], code: Optional
     if not code:
         code = REQUEST_PARAM_ERROR
     if req and req.fail:
+        return render_template("error.j2", msg=msg, code=code)
+    else:
         resp = wls.generate_failure(code, req)
         return redirect(resp.redirect_url)
-    else:
-        return render_template("error.j2", msg=msg, code=code)
 
 
 @app.get("/")
