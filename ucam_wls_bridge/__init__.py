@@ -86,7 +86,7 @@ def fail(req: Optional[AuthRequest], error: Union[str, WLSError], code: Optional
         msg = error
     if not code:
         code = REQUEST_PARAM_ERROR
-    if req and req.fail:
+    if not req or req.fail:
         return render_template("error.j2", msg=msg, code=code)
     else:
         resp = wls.generate_failure(code, req)
