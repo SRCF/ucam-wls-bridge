@@ -21,6 +21,7 @@ Handler = Callable[[Dict[str, Any]], User]
 _SESSION_KEY = "uwb_auth"
 SESSION_USERNAME_KEY = f"{_SESSION_KEY}_username"
 SESSION_PTAGS_KEY = f"{_SESSION_KEY}_ptags"
+SESSION_DOMAINS_KEY = f"{_SESSION_KEY}_domains"
 
 WLS_ERROR_MAP: Dict[Type[WLSError], int] = {
     NoMutualAuthType: NO_MUTUAL_AUTH_TYPES,
@@ -57,10 +58,30 @@ def get_user() -> Union[User, Tuple[None, None]]:
 def set_user(username: str, ptags: List[str]):
     session[SESSION_USERNAME_KEY] = username
     session[SESSION_PTAGS_KEY] = ptags
+    session[SESSION_DOMAINS_KEY] = []
 
 def clear_user():
     session.pop(SESSION_USERNAME_KEY, None)
     session.pop(SESSION_PTAGS_KEY, None)
+    session.pop(SESSION_DOMAINS_KEY, None)
+
+
+def has_domain(domain: str) -> Optional[bool]:
+    try:
+        return domain in session[SESSION_DOMAINS_KEY]
+    except KeyError:
+        return None
+
+def add_domain(domain: str):
+    try:
+        domains = session[SESSION_DOMAINS_KEY]
+    except KeyError:
+        session[SESSION_DOMAINS_KEY] = [domain]
+    else:
+        if domain not in domains:
+            domains.append(domain)
+            # Flask might not detect changes to mutable objects.
+            session.modified = True
 
 
 def parse_wls(query: str):
@@ -77,6 +98,13 @@ def parse_wls(query: str):
         raise WLSFail(req, "Insecure web application.", REQUEST_PARAM_ERROR)
     return req
 
+
+def success(req: AuthRequest, username: str, ptags: List[str]):
+    add_domain(urlsplit(req.url).netloc)
+    expiry = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=6)
+    principal = AuthPrincipal(username, ["pwd"], ptags, expiry)
+    wls_resp = wls.authenticate_active(req, principal, "pwd")
+    return redirect(wls_resp.redirect_url)
 
 def fail(req: Optional[AuthRequest], error: Union[str, WLSError], code: Optional[int] = None):
     if isinstance(error, WLSError):
@@ -108,6 +136,8 @@ def wls_authenticate():
         return fail(*e.args)
     username, ptags = get_user()
     domain = urlsplit(req.url).netloc
+    if not req.iact and has_domain(domain):
+        return success(req, username, ptags)
     return render_template(
         "authenticate.j2",
         username=username,
@@ -130,10 +160,7 @@ def wls_authenticate_submit():
         return fail(req, "User declined authentication.", USER_CANCEL)
     username, ptags = get_user()
     if username:
-        expiry = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=6)
-        principal = AuthPrincipal(username, ["pwd"], ptags, expiry)
-        wls_resp = wls.authenticate_active(req, principal, "pwd")
-        return redirect(wls_resp.redirect_url)
+        return success(req, username, ptags)
     else:
         return oidc_authenticate(query)
 
