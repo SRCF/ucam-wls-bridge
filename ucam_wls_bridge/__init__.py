@@ -99,11 +99,14 @@ def parse_wls(query: str):
     return req
 
 
-def success(req: AuthRequest, username: str, ptags: List[str]):
+def success(req: AuthRequest, username: str, ptags: List[str], fresh: bool = False):
     add_domain(urlsplit(req.url).netloc)
     expiry = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=6)
     principal = AuthPrincipal(username, ["pwd"], ptags, expiry)
-    wls_resp = wls.authenticate_active(req, principal, "pwd")
+    if fresh:
+        wls_resp = wls.authenticate_active(req, principal, "pwd")
+    else:
+        wls_resp = wls.authenticate_passive(req, principal)
     return redirect(wls_resp.redirect_url)
 
 def fail(req: Optional[AuthRequest], error: Union[str, WLSError], code: Optional[int] = None):
@@ -116,9 +119,8 @@ def fail(req: Optional[AuthRequest], error: Union[str, WLSError], code: Optional
         code = REQUEST_PARAM_ERROR
     if not req or req.fail:
         return render_template("error.j2", msg=msg, code=code)
-    else:
-        resp = wls.generate_failure(code, req)
-        return redirect(resp.redirect_url)
+    resp = wls.generate_failure(code, req)
+    return redirect(resp.redirect_url)
 
 
 @app.get("/")
@@ -149,25 +151,27 @@ def wls_authenticate():
 
 
 @app.post("/wls/authenticate")
-def wls_authenticate_submit():
-    query = request.query_string.decode()
+def wls_authenticate_submit(oidc_query: Optional[str] = None):
+    query = oidc_query or request.query_string.decode()
     try:
         req = parse_wls(query)
     except WLSFail as e:
         return fail(*e.args)
-    action = request.form.get("action")
-    if action == "cancel":
-        return fail(req, "User declined authentication.", USER_CANCEL)
+    if not oidc_query:
+        action = request.form.get("action")
+        if action == "cancel":
+            return fail(req, "User declined authentication.", USER_CANCEL)
     username, ptags = get_user()
-    if username:
-        return success(req, username, ptags)
-    else:
+    if not username or (req.iact and not oidc_query):
         return oidc_authenticate(query)
+    return success(req, username, ptags, bool(oidc_query))
 
 
 @app.get("/oidc/authenticate")
 def oidc_authenticate(state: Optional[str] = None):
-    kwargs = {"state": state} if state else {}
+    kwargs = {"prompt": "login"}
+    if state:
+        kwargs["state"] = state
     return upstream.authorize_redirect(url_for("oidc_callback", _external=True), **kwargs)
 
 
@@ -193,8 +197,7 @@ def oidc_callback():
         AuthRequest.from_query_string(state)
     except WLSError as e:
         return redirect(url_for("index"))
-    else:
-        return redirect(url_for("wls_authenticate", **parse_qs(state)))
+    return wls_authenticate_submit(state)
 
 
 @app.get("/oidc/logout")
