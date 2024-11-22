@@ -144,6 +144,7 @@ def wls_authenticate():
         "authenticate.j2",
         username=username,
         ptags=ptags,
+        req=req,
         domain=domain,
         url=req.url,
         desc=req.desc,
