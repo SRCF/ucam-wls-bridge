@@ -12,7 +12,9 @@ from authlib.integrations.flask_client import FlaskOAuth2App, OAuth
 
 from ucam_wls import AuthPrincipal, AuthRequest, load_private_key, LoginService
 from ucam_wls.errors import NoMutualAuthType, ProtocolVersionUnsupported, WLSError
-from ucam_wls.status import AUTH_DECLINED, NO_MUTUAL_AUTH_TYPES, REQUEST_PARAM_ERROR, UNSUPPORTED_PROTO_VER, USER_CANCEL
+from ucam_wls.status import (
+    AUTH_DECLINED, INTERACTION_REQUIRED, NO_MUTUAL_AUTH_TYPES, REQUEST_PARAM_ERROR, UNSUPPORTED_PROTO_VER, USER_CANCEL,
+)
 
 
 User = Tuple[str, List[str]]  # username, ptags
@@ -140,6 +142,8 @@ def wls_authenticate():
     domain = urlsplit(req.url).netloc
     if not req.iact and has_domain(domain):
         return success(req, username, ptags)
+    elif req.iact is False:
+        return fail(req, "Interaction is required.", INTERACTION_REQUIRED)
     return render_template(
         "authenticate.j2",
         username=username,
