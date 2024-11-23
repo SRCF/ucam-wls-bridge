@@ -140,19 +140,19 @@ def wls_authenticate():
         return fail(*e.args)
     username, ptags = get_user()
     domain = urlsplit(req.url).netloc
-    if not req.iact and has_domain(domain):
-        return success(req, username, ptags)
-    elif req.iact is False:
+    if req.iact is not False:
+        return render_template(
+            "authenticate.j2",
+            username=username,
+            ptags=ptags,
+            req=req,
+            domain=domain,
+            url=req.url,
+            desc=req.desc,
+        )
+    if not has_domain(domain):
         return fail(req, "Interaction is required.", INTERACTION_REQUIRED)
-    return render_template(
-        "authenticate.j2",
-        username=username,
-        ptags=ptags,
-        req=req,
-        domain=domain,
-        url=req.url,
-        desc=req.desc,
-    )
+    return success(req, username, ptags)
 
 
 @app.post("/wls/authenticate")
