@@ -1,9 +1,10 @@
 from datetime import datetime, timedelta, timezone
 from functools import reduce
 from importlib import import_module
+import logging
 import os
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import urlsplit
 
 from flask import Flask, redirect, render_template, request, session, url_for
 
@@ -37,6 +38,7 @@ app.config.update({
     "UPSTREAM_CLIENT_ID": os.environ["UWB_OIDC_CLIENT_ID"],
     "UPSTREAM_CLIENT_SECRET": os.environ["UWB_OIDC_CLIENT_SECRET"],
 })
+app.logger.setLevel(logging.INFO)
 
 oauth = OAuth(app)
 oauth.register("upstream", server_metadata_url=os.environ["UWB_OIDC_URL"], client_kwargs={"scope": "openid profile"})
@@ -106,10 +108,11 @@ def success(req: AuthRequest, username: str, ptags: List[str], fresh: bool = Fal
     expiry = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=6)
     principal = AuthPrincipal(username, ["pwd"], ptags, expiry)
     if fresh:
-        wls_resp = wls.authenticate_active(req, principal, "pwd")
+        resp = wls.authenticate_active(req, principal, "pwd")
     else:
-        wls_resp = wls.authenticate_passive(req, principal)
-    return redirect(wls_resp.redirect_url)
+        resp = wls.authenticate_passive(req, principal)
+    app.logger.info("Redirecting with success: %s", resp.response_string)
+    return redirect(resp.redirect_url)
 
 def fail(req: Optional[AuthRequest], error: Union[str, WLSError], code: Optional[int] = None):
     if isinstance(error, WLSError):
@@ -120,8 +123,10 @@ def fail(req: Optional[AuthRequest], error: Union[str, WLSError], code: Optional
     if not code:
         code = REQUEST_PARAM_ERROR
     if not req or req.fail:
+        app.logger.info("Showing fail page: %s - %s", code, msg)
         return render_template("error.j2", msg=msg, code=code)
     resp = wls.generate_failure(code, req)
+    app.logger.info("Redirecting with fail: %s", resp.response_string)
     return redirect(resp.redirect_url)
 
 
