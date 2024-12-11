@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from functools import reduce
 from importlib import import_module
 import logging
@@ -38,6 +38,7 @@ app.config.update({
     "UPSTREAM_CLIENT_ID": os.environ["UWB_OIDC_CLIENT_ID"],
     "UPSTREAM_CLIENT_SECRET": os.environ["UWB_OIDC_CLIENT_SECRET"],
 })
+app.jinja_env.globals["date"] = date
 app.logger.setLevel(logging.INFO)
 
 oauth = OAuth(app)
